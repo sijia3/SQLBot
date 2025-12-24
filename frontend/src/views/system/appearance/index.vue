@@ -432,7 +432,7 @@ const saveHandler = () => {
           },
         })
         .then((res) => {
-          if (!res) {
+          if (res) {
             ElMessage.success(t('system.setting_successfully'))
             appearanceStore.setLoaded(false)
             appearanceStore.setAppearance()

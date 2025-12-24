@@ -28,4 +28,10 @@ api_router.include_router(apikey.router)
 
 api_router.include_router(recommended_problem.router)
 
-# test add
+# 自定义提示词
+from apps.system.api import custom_prompt
+api_router.include_router(custom_prompt.router)
+
+#
+from apps.system.api import appearance
+api_router.include_router(appearance.router)
