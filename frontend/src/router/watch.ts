@@ -14,7 +14,7 @@ export const watchRouter = (router: Router) => {
   router.beforeEach(async (to: any, from: any, next: any) => {
     await loadXpackStatic()
     await appearanceStore.setAppearance()
-    LicenseGenerator.generateRouters(router)
+    // LicenseGenerator.generateRouters(router)
     if (to.path.startsWith('/login') && userStore.getUid) {
       next('/')
       return
