@@ -5,7 +5,7 @@ from apps.dashboard.api import dashboard_api
 from apps.data_training.api import data_training
 from apps.datasource.api import datasource, table_relation, recommended_problem
 from apps.mcp import mcp
-from apps.system.api import login, user, aimodel, workspace, assistant, parameter, apikey
+from apps.system.api import login, user, aimodel, workspace, assistant, parameter, apikey, third_party_login
 from apps.terminology.api import terminology
 from apps.settings.api import base
 
@@ -35,3 +35,6 @@ api_router.include_router(custom_prompt.router)
 #
 from apps.system.api import appearance
 api_router.include_router(appearance.router)
+
+# 第三方单点登录
+api_router.include_router(third_party_login.router)

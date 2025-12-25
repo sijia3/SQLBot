@@ -15,7 +15,8 @@ IMAGE_KEYS = ["login", "navigate", "web", "favicon", "loginBg"]
 # 定义外观相关的 Key 列表，用于强制分组
 APPEARANCE_KEYS = [
                       "name", "slogan", "pc_welcome", "pc_welcome_desc",
-                      "foot", "footContent", "help", "showSlogan", "showDoc", "showAbout", "bg"
+                      "foot", "footContent", "help", "showSlogan", "showDoc", "showAbout",
+                      "bg", "themeColor", "customColor"
                   ] + IMAGE_KEYS
 
 # 1. 获取参数列表

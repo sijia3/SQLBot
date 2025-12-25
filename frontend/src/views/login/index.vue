@@ -75,10 +75,11 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useI18n } from 'vue-i18n'
+import { ThirdPartyAuthApi } from '@/api/third_party_login'
 import custom_small from '@/assets/svg/logo-custom_small.svg'
 import LOGO_fold from '@/assets/LOGO-fold.svg'
 import login_image from '@/assets/embedded/login_image.png'
@@ -87,6 +88,7 @@ import loginImage from '@/assets/blue/login-image_blue.png'
 import Handler from './xpack/Handler.vue'
 
 const showLoading = ref(true)
+const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const appearanceStore = useAppearanceStoreWithOut()
@@ -126,6 +128,55 @@ const submitForm = () => {
 const switchTab = (name: string) => {
   activeName.value = name || 'simple'
 }
+
+// [新增] 处理第三方登录的核心逻辑
+const handleOAuthLogin = async () => {
+  const code = route.query.code as string
+  const source = route.query.source as string
+
+  // 如果 URL 中包含 code，说明是第三方回调
+  if (code) {
+    showLoading.value = true // 确保显示加载蒙版
+    try {
+      // 1. 调用后端接口换取 Token
+      const res = await ThirdPartyAuthApi.loginByOauth({
+        code,
+        source: source || 'browser'
+      })
+
+      // 2. 将 Token 存入 Pinia Store
+      // 注意：这里假设你的 userStore 有 setToken 方法。
+      // 如果没有，通常 userStore.login 内部也是干这件事。
+      // 你可能需要查看 src/stores/user.ts 确认方法名，通常是 setToken 或 saveToken
+      if (userStore.setToken) {
+        userStore.setToken(res.access_token)
+      } else {
+        // 如果 store 没有暴露 setToken，可能需要手动存 localStorage (不推荐，尽量用 store)
+        localStorage.setItem('access_token', res.access_token)
+      }
+
+      // 3. [关键步骤] 跳转到聊天页
+      await router.replace('/chat')
+
+    } catch (error) {
+      console.error('OAuth Login Failed:', error)
+      // 登录失败，取消加载状态，显示普通登录页让用户手动登录
+      showLoading.value = false
+    }
+  } else {
+    // 没有 code，说明是正常访问登录页
+    // 这里要注意：原本的逻辑可能在 Handler 组件里处理了 loading
+    // 为了防止冲突，我们延时一点关闭，或者等待 Handler 组件发出的事件
+    setTimeout(() => {
+        showLoading.value = false
+    }, 500)
+  }
+}
+
+// [新增] 组件挂载时执行
+onMounted(() => {
+  handleOAuthLogin()
+})
 </script>
 
 <style lang="less" scoped>
