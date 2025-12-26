@@ -5,6 +5,7 @@ from typing import Optional
 from langchain_core.embeddings import Embeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from pydantic import BaseModel
+from modelscope import snapshot_download
 
 from common.core.config import settings
 
@@ -17,9 +18,12 @@ class EmbeddingModelInfo(BaseModel):
     device: str = 'cpu'
 
 
-local_embedding_model = EmbeddingModelInfo(folder=settings.LOCAL_MODEL_PATH,
-                                           name=os.path.join(settings.LOCAL_MODEL_PATH, 'embedding',
-                                                             "shibing624_text2vec-base-chinese"))
+# 这里的 name 修改为 ModelScope 上的模型 ID
+local_embedding_model = EmbeddingModelInfo(
+    folder=settings.LOCAL_MODEL_PATH,
+    name="zjwan461/shibing624_text2vec-base-chinese",  # ModelScope 的模型 ID
+    device='cpu'
+)
 
 _lock = threading.Lock()
 locks = {}
@@ -31,7 +35,11 @@ class EmbeddingModelCache:
 
     @staticmethod
     def _new_instance(config: EmbeddingModelInfo = local_embedding_model):
-        return HuggingFaceEmbeddings(model_name=config.name, cache_folder=config.folder,
+        model_dir = snapshot_download(
+            model_id=config.name,
+            cache_dir=config.folder
+        )
+        return HuggingFaceEmbeddings(model_name=model_dir, cache_folder=config.folder,
                                      model_kwargs={'device': config.device},
                                      encode_kwargs={'normalize_embeddings': True}
                                      )
