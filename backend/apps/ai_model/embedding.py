@@ -4,6 +4,7 @@ from typing import Optional
 
 from langchain_core.embeddings import Embeddings
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import DashScopeEmbeddings
 from pydantic import BaseModel
 from modelscope import snapshot_download
 
@@ -13,16 +14,26 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class EmbeddingModelInfo(BaseModel):
-    folder: str
+    folder: Optional[str] = None
     name: str
     device: str = 'cpu'
+    type: str = 'local'
+    api_key: Optional[str] = None
 
 
 # 这里的 name 修改为 ModelScope 上的模型 ID
+# local_embedding_model = EmbeddingModelInfo(
+#     folder=settings.LOCAL_MODEL_PATH,
+#     name="zjwan461/shibing624_text2vec-base-chinese",  # ModelScope 的模型 ID
+#     device='cpu'
+# )
+
+# 方案 B: 使用 Qwen (通义千问) API
+# 请确保环境变量 DASHSCOPE_API_KEY 已设置，或者直接填入 api_key
 local_embedding_model = EmbeddingModelInfo(
-    folder=settings.LOCAL_MODEL_PATH,
-    name="zjwan461/shibing624_text2vec-base-chinese",  # ModelScope 的模型 ID
-    device='cpu'
+    type='qwen',
+    name="text-embedding-v4", # Qwen 的 embedding 模型名称
+    api_key="sk-0da558b660674d28955434ce0f7fadd8" # 替换为你的阿里云 API Key
 )
 
 _lock = threading.Lock()
@@ -35,14 +46,21 @@ class EmbeddingModelCache:
 
     @staticmethod
     def _new_instance(config: EmbeddingModelInfo = local_embedding_model):
-        model_dir = snapshot_download(
-            model_id=config.name,
-            cache_dir=config.folder
-        )
-        return HuggingFaceEmbeddings(model_name=model_dir, cache_folder=config.folder,
-                                     model_kwargs={'device': config.device},
-                                     encode_kwargs={'normalize_embeddings': True}
-                                     )
+        if config.type == 'qwen':
+            # 使用阿里云 DashScope (Qwen)
+            return DashScopeEmbeddings(
+                model=config.name,
+                dashscope_api_key=config.api_key
+            )
+        else:
+            model_dir = snapshot_download(
+                model_id=config.name,
+                cache_dir=config.folder
+            )
+            return HuggingFaceEmbeddings(model_name=model_dir, cache_folder=config.folder,
+                                         model_kwargs={'device': config.device},
+                                         encode_kwargs={'normalize_embeddings': True}
+                                         )
 
     @staticmethod
     def _get_lock(key: str = settings.DEFAULT_EMBEDDING_MODEL):
