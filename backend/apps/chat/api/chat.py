@@ -21,8 +21,8 @@ from apps.system.schemas.permission import SqlbotPermission, require_permissions
 from common.core.deps import CurrentAssistant, SessionDep, CurrentUser, Trans
 from common.utils.command_utils import parse_quick_command
 from common.utils.data_format import DataFormat
-from sqlbot_xpack.audit.models.log_model import OperationType, OperationDetails, OperationModules
-from sqlbot_xpack.audit.schemas.logger_decorator import system_log, LogConfig
+from common.audit.models.log_model import OperationType, OperationModules
+from common.audit.schemas.logger_decorator import LogConfig, system_log
 
 router = APIRouter(tags=["Data Q&A"], prefix="/chat")
 
@@ -71,6 +71,11 @@ async def chat_predict_data(session: SessionDep, chat_record_id: int):
 
 
 @router.post("/rename", response_model=str, summary=f"{PLACEHOLDER_PREFIX}rename_chat")
+@system_log(LogConfig(
+    operation_type=OperationType.UPDATE,
+    module=OperationModules.CHAT,
+    resource_id_expr="chat.id"
+))
 async def rename(session: SessionDep, chat: RenameChat):
     try:
         return rename_chat(session=session, rename_object=chat)
@@ -81,14 +86,14 @@ async def rename(session: SessionDep, chat: RenameChat):
         )
 
 
-@router.delete("/{chart_id}", response_model=str, summary=f"{PLACEHOLDER_PREFIX}delete_chat")
+@router.delete("/{chart_id}/{brief}", response_model=str, summary=f"{PLACEHOLDER_PREFIX}delete_chat")
 @system_log(LogConfig(
-    operation_type=OperationType.DELETE_QA,
-    operation_detail=OperationDetails.DELETE_QA_DETAILS,
-    module=OperationModules.QA,
-    resource_id_expr="chart_id"
+    operation_type=OperationType.DELETE,
+    module=OperationModules.CHAT,
+    resource_id_expr="chart_id",
+    remark_expr="brief"
 ))
-async def delete(session: SessionDep, chart_id: int):
+async def delete(session: SessionDep, chart_id: int, brief: str):
     try:
         return delete_chat(session=session, chart_id=chart_id)
     except Exception as e:
@@ -101,9 +106,8 @@ async def delete(session: SessionDep, chart_id: int):
 @router.post("/start", response_model=ChatInfo, summary=f"{PLACEHOLDER_PREFIX}start_chat")
 @require_permissions(permission=SqlbotPermission(type='ds', keyExpression="create_chat_obj.datasource"))
 @system_log(LogConfig(
-    operation_type=OperationType.CREATE_QA,
-    operation_detail=OperationDetails.CREATE_QA_DETAILS,
-    module=OperationModules.QA,
+    operation_type=OperationType.CREATE,
+    module=OperationModules.CHAT,
     result_id_expr="id"
 ))
 async def start_chat(session: SessionDep, current_user: CurrentUser, create_chat_obj: CreateChat):
@@ -158,7 +162,7 @@ async def ask_recommend_questions(session: SessionDep, current_user: CurrentUser
 
 @router.get("/recent_questions/{datasource_id}", response_model=List[str],
             summary=f"{PLACEHOLDER_PREFIX}get_recommend_questions")
-@require_permissions(permission=SqlbotPermission(type='ds', keyExpression="datasource_id"))
+#@require_permissions(permission=SqlbotPermission(type='ds', keyExpression="datasource_id"))
 async def recommend_questions(session: SessionDep, current_user: CurrentUser,
                               datasource_id: int = Path(..., description=f"{PLACEHOLDER_PREFIX}ds_id")):
     return list_recent_questions(session=session, current_user=current_user, datasource_id=datasource_id)
@@ -200,7 +204,7 @@ async def question_answer_inner(session: SessionDep, current_user: CurrentUser, 
                 stmt = select(ChatRecord.id, ChatRecord.chat_id, ChatRecord.analysis_record_id,
                               ChatRecord.predict_record_id, ChatRecord.regenerate_record_id,
                               ChatRecord.first_chat).where(
-                    and_(ChatRecord.id == record_id))
+                    and_(ChatRecord.id == record_id)).order_by(ChatRecord.create_time.desc())
                 _record = session.execute(stmt).fetchone()
                 if not _record:
                     raise Exception(f'Record id: {record_id} does not exist')
@@ -356,7 +360,11 @@ async def analysis_or_predict(session: SessionDep, current_user: CurrentUser, ch
         traceback.print_exc()
         if stream:
             def _err(_e: Exception):
-                yield 'data:' + orjson.dumps({'content': str(_e), 'type': 'error'}).decode() + '\n\n'
+                if in_chat:
+                    yield 'data:' + orjson.dumps({'content': str(_e), 'type': 'error'}).decode() + '\n\n'
+                else:
+                    yield f'&#x274c; **ERROR:**\n'
+                    yield f'> {str(_e)}\n'
 
             return StreamingResponse(_err(e), media_type="text/event-stream")
         else:

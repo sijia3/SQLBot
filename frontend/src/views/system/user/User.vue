@@ -23,7 +23,7 @@
           </template>
           {{ $t('user.filter') }}
         </el-button>
-        <!-- <el-button secondary @click="handleUserImport">
+        <!--  <el-button secondary @click="handleUserImport">
           <template #icon>
             <ccmUpload></ccmUpload>
           </template>
@@ -371,7 +371,7 @@
       </div>
     </template>
   </el-dialog>
-  <UserImport ref="userImportRef"></UserImport>
+  <UserImport ref="userImportRef" @refresh-grid="search"></UserImport>
   <drawer-main
     ref="drawerMainRef"
     :filter-options="filterOption"
@@ -434,7 +434,7 @@ const filterOption = ref<any[]>([
       { id: '2', name: 'OIDC' },
       { id: '3', name: 'LDAP' },
       { id: '4', name: 'OAuth2' },
-      { id: '5', name: 'SAML2' },
+      /* { id: '5', name: 'SAML2' }, */
     ],
     field: 'origins',
     title: t('user.user_source'),
@@ -579,9 +579,9 @@ const handleEditPassword = (id: any) => {
   })
 }
 
-// const handleUserImport = () => {
-//   userImportRef.value.showDialog()
-// }
+/* const handleUserImport = () => {
+  userImportRef.value.showDialog()
+} */
 
 const handleConfirmPassword = () => {
   passwordRef.value.validate((val: any) => {
