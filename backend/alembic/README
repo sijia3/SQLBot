@@ -1,1 +1,9 @@
 Generic single-database configuration.
+
+
+# 升级所有分支（主线和你的支线）
+alembic upgrade heads
+
+# 自定义添加表的时候，要指定custom_features
+# --head 指定在你的 custom_features 分支之后生成新的 revision
+alembic revision --autogenerate -m "add another private table" --head custom_features
