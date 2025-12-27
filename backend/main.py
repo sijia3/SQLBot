@@ -32,7 +32,7 @@ from common.utils.utils import SQLBotLogUtil
 
 def run_migrations():
     alembic_cfg = Config("alembic.ini")
-    command.upgrade(alembic_cfg, "head")
+    command.upgrade(alembic_cfg, "heads")
 
 
 def init_terminology_embedding_data():
