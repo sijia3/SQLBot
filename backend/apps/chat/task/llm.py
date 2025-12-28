@@ -551,11 +551,13 @@ class LLMService:
         if _error:
             raise _error
 
-    def generate_sql(self, _session: Session):
+    def generate_sql(self, _session: Session, is_retry: bool = False):
         # append current question
-        self.sql_message.append(HumanMessage(
-            self.chat_question.sql_user_question(current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                 change_title=self.change_title)))
+        # 核心修改：仅在非重试时添加用户原始问题
+        if not is_retry:
+            self.sql_message.append(HumanMessage(
+                self.chat_question.sql_user_question(current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                                     change_title=self.change_title)))
 
         self.current_logs[OperationEnum.GENERATE_SQL] = start_log(session=_session,
                                                                   ai_modal_id=self.chat_question.ai_modal_id,
@@ -1014,95 +1016,138 @@ class LLMService:
             if not connected:
                 raise SQLBotDBConnectionError('Connect DB failed')
 
-            # generate sql
-            sql_res = self.generate_sql(_session)
+            max_retries = 3
+            retry_count = 0
+            # 用于在循环外访问结果
             full_sql_text = ''
-            for chunk in sql_res:
-                full_sql_text += chunk.get('content')
-                if in_chat:
-                    yield 'data:' + orjson.dumps(
-                        {'content': chunk.get('content'), 'reasoning_content': chunk.get('reasoning_content'),
-                         'type': 'sql-result'}).decode() + '\n\n'
-            if in_chat:
-                yield 'data:' + orjson.dumps({'type': 'info', 'msg': 'sql generated'}).decode() + '\n\n'
-            # filter sql
-            SQLBotLogUtil.info(full_sql_text)
+            result = None
+            chart_type = None
+            sql = ''
+            while retry_count < max_retries:
+                try:
+                    # 1. 生成 SQL
+                    # 如果是重试(retry_count > 0)，则传递 is_retry=True
+                    is_retry_flag = (retry_count > 0)
 
-            chart_type = self.get_chart_type_from_sql_answer(full_sql_text)
+                    if in_chat and is_retry_flag:
+                        # 可选：提示用户正在自动修正
+                        correction_msg = f"SQL 执行出错，正在进行第 {retry_count} 次自动修正..."
+                        yield 'data:' + orjson.dumps(
+                            {'content': f"\n> *[System]* {correction_msg}\n", 'type': 'sql-result'}).decode() + '\n\n'
 
-            # return title
-            if self.change_title:
-                llm_brief = self.get_brief_from_sql_answer(full_sql_text)
-                llm_brief_generated = bool(llm_brief)
-                if llm_brief_generated or (self.chat_question.question and self.chat_question.question.strip() != ''):
-                    save_brief = llm_brief if (llm_brief and llm_brief != '') else self.chat_question.question.strip()[
-                                                                                   :20]
-                    brief = rename_chat(session=_session,
-                                        rename_object=RenameChat(id=self.get_record().chat_id,
-                                                                 brief=save_brief, brief_generate=llm_brief_generated))
+                    # generate sql
+                    sql_res = self.generate_sql(_session, is_retry=is_retry_flag)
+                    full_sql_text = ''
+                    for chunk in sql_res:
+                        full_sql_text += chunk.get('content')
+                        if in_chat:
+                            yield 'data:' + orjson.dumps(
+                                {'content': chunk.get('content'), 'reasoning_content': chunk.get('reasoning_content'),
+                                 'type': 'sql-result'}).decode() + '\n\n'
                     if in_chat:
-                        yield 'data:' + orjson.dumps({'type': 'brief', 'brief': brief}).decode() + '\n\n'
+                        yield 'data:' + orjson.dumps({'type': 'info', 'msg': 'sql generated'}).decode() + '\n\n'
+                    # filter sql
+                    SQLBotLogUtil.info(full_sql_text)
+
+                    chart_type = self.get_chart_type_from_sql_answer(full_sql_text)
+
+                    # return title
+                    if self.change_title and retry_count == 0:
+                        llm_brief = self.get_brief_from_sql_answer(full_sql_text)
+                        llm_brief_generated = bool(llm_brief)
+                        if llm_brief_generated or (self.chat_question.question and self.chat_question.question.strip() != ''):
+                            save_brief = llm_brief if (llm_brief and llm_brief != '') else self.chat_question.question.strip()[
+                                                                                           :20]
+                            brief = rename_chat(session=_session,
+                                                rename_object=RenameChat(id=self.get_record().chat_id,
+                                                                         brief=save_brief, brief_generate=llm_brief_generated))
+                            if in_chat:
+                                yield 'data:' + orjson.dumps({'type': 'brief', 'brief': brief}).decode() + '\n\n'
+                            if not stream:
+                                json_result['title'] = brief
+
+                    use_dynamic_ds: bool = self.current_assistant and self.current_assistant.type in dynamic_ds_types
+                    is_page_embedded: bool = self.current_assistant and self.current_assistant.type == 4
+                    dynamic_sql_result = None
+                    sqlbot_temp_sql_text = None
+                    assistant_dynamic_sql = None
+                    # row permission
+                    if ((not self.current_assistant or is_page_embedded) and is_normal_user(
+                            self.current_user)) or use_dynamic_ds:
+                        sql, tables = self.check_sql(res=full_sql_text)
+                        sql_result = None
+
+                        if use_dynamic_ds:
+                            dynamic_sql_result = self.generate_assistant_dynamic_sql(_session, sql, tables)
+                            sqlbot_temp_sql_text = dynamic_sql_result.get(
+                                'sqlbot_temp_sql_text') if dynamic_sql_result else None
+                            # sql_result = self.generate_assistant_filter(sql, tables)
+                        else:
+                            sql_result = self.generate_filter(_session, sql, tables)  # maybe no sql and tables
+
+                        if sql_result:
+                            SQLBotLogUtil.info(sql_result)
+                            sql = self.check_save_sql(session=_session, res=sql_result)
+                        elif dynamic_sql_result and sqlbot_temp_sql_text:
+                            assistant_dynamic_sql = self.check_save_sql(session=_session, res=sqlbot_temp_sql_text)
+                        else:
+                            sql = self.check_save_sql(session=_session, res=full_sql_text)
+                    else:
+                        sql = self.check_save_sql(session=_session, res=full_sql_text)
+
+                    SQLBotLogUtil.info('sql: ' + sql)
+
                     if not stream:
-                        json_result['title'] = brief
+                        json_result['sql'] = sql
 
-            use_dynamic_ds: bool = self.current_assistant and self.current_assistant.type in dynamic_ds_types
-            is_page_embedded: bool = self.current_assistant and self.current_assistant.type == 4
-            dynamic_sql_result = None
-            sqlbot_temp_sql_text = None
-            assistant_dynamic_sql = None
-            # row permission
-            if ((not self.current_assistant or is_page_embedded) and is_normal_user(
-                    self.current_user)) or use_dynamic_ds:
-                sql, tables = self.check_sql(res=full_sql_text)
-                sql_result = None
+                    format_sql = sqlparse.format(sql, reindent=True)
+                    if in_chat:
+                        yield 'data:' + orjson.dumps({'content': format_sql, 'type': 'sql'}).decode() + '\n\n'
+                    else:
+                        if stream:
+                            yield f'```sql\n{format_sql}\n```\n\n'
 
-                if use_dynamic_ds:
-                    dynamic_sql_result = self.generate_assistant_dynamic_sql(_session, sql, tables)
-                    sqlbot_temp_sql_text = dynamic_sql_result.get(
-                        'sqlbot_temp_sql_text') if dynamic_sql_result else None
-                    # sql_result = self.generate_assistant_filter(sql, tables)
-                else:
-                    sql_result = self.generate_filter(_session, sql, tables)  # maybe no sql and tables
+                    # execute sql
+                    real_execute_sql = sql
+                    if sqlbot_temp_sql_text and assistant_dynamic_sql:
+                        dynamic_sql_result.pop('sqlbot_temp_sql_text')
+                        for origin_table, subsql in dynamic_sql_result.items():
+                            assistant_dynamic_sql = assistant_dynamic_sql.replace(f'{dynamic_subsql_prefix}{origin_table}',
+                                                                                  subsql)
+                        real_execute_sql = assistant_dynamic_sql
 
-                if sql_result:
-                    SQLBotLogUtil.info(sql_result)
-                    sql = self.check_save_sql(session=_session, res=sql_result)
-                elif dynamic_sql_result and sqlbot_temp_sql_text:
-                    assistant_dynamic_sql = self.check_save_sql(session=_session, res=sqlbot_temp_sql_text)
-                else:
-                    sql = self.check_save_sql(session=_session, res=full_sql_text)
-            else:
-                sql = self.check_save_sql(session=_session, res=full_sql_text)
+                    if finish_step.value <= ChatFinishStep.GENERATE_SQL.value:
+                        if in_chat:
+                            yield 'data:' + orjson.dumps({'type': 'finish'}).decode() + '\n\n'
+                        if not stream:
+                            yield json_result
+                        return
 
-            SQLBotLogUtil.info('sql: ' + sql)
+                    result = self.execute_sql(sql=real_execute_sql)
 
-            if not stream:
-                json_result['sql'] = sql
+                    break
+                except Exception as e:
+                    # 捕获执行过程中的错误
+                    retry_count += 1
+                    error_str = str(e)
+                    SQLBotLogUtil.error(f"SQL Generation/Execution Error (Attempt {retry_count}): {error_str}")
 
-            format_sql = sqlparse.format(sql, reindent=True)
-            if in_chat:
-                yield 'data:' + orjson.dumps({'content': format_sql, 'type': 'sql'}).decode() + '\n\n'
-            else:
-                if stream:
-                    yield f'```sql\n{format_sql}\n```\n\n'
+                    # 如果超过最大重试次数，则抛出异常，交给外层处理
+                    if retry_count >= max_retries:
+                        raise e
 
-            # execute sql
-            real_execute_sql = sql
-            if sqlbot_temp_sql_text and assistant_dynamic_sql:
-                dynamic_sql_result.pop('sqlbot_temp_sql_text')
-                for origin_table, subsql in dynamic_sql_result.items():
-                    assistant_dynamic_sql = assistant_dynamic_sql.replace(f'{dynamic_subsql_prefix}{origin_table}',
-                                                                          subsql)
-                real_execute_sql = assistant_dynamic_sql
+                    # 构造纠错提示词
+                    feedback_prompt = f"""
+                                        生成的SQL执行报错: {error_str}
+                                        错误的SQL是: {full_sql_text}
+                                        请根据报错信息修正SQL，确保字段名和表名正确。
+                                        """
 
-            if finish_step.value <= ChatFinishStep.GENERATE_SQL.value:
-                if in_chat:
-                    yield 'data:' + orjson.dumps({'type': 'finish'}).decode() + '\n\n'
-                if not stream:
-                    yield json_result
-                return
+                    # 将错误信息作为新的 HumanMessage 添加到对话历史
+                    self.sql_message.append(HumanMessage(content=feedback_prompt))
 
-            result = self.execute_sql(sql=real_execute_sql)
+                    # 继续下一次循环 (Retry)
+                    continue
 
             _data = DataFormat.convert_large_numbers_in_object_array(result.get('data'))
             result["data"] = _data
