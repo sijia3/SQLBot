@@ -194,7 +194,7 @@
     "creator": "创建人",
     "dashboard_id": "仪表板ID",
     "create_time": "创建时间",
-    "updator": "更新人",
+    "updater": "更新人",
     "update_time": "更新时间",
     "edit": "编辑",
     "edit_title": "编辑标题",
@@ -215,7 +215,6 @@
     "chart_selected": "已选{0}"
   },
   "qa": {
-    "recommended_repetitive_tips": "Duplicate questions exist",
     "retrieve_error": "暂无内容",
     "retrieve_again": "重新获取",
     "recently": "最近",
@@ -448,7 +447,8 @@
     "enable": "启用",
     "disable": "禁用",
     "local_creation": "本地创建",
-    "feishu": "飞书",
+    "lark": "飞书",
+    "larksuite": "国际飞书",
     "dingtalk": "钉钉",
     "wechat_for_business": "企业微信",
     "1240_results": "{msg} 个结果 ",
@@ -457,6 +457,7 @@
     "enabled": "已启用",
     "edit_user": "编辑用户",
     "del_user": "是否删除用户: {msg}?",
+    "del_key": "是否删除key: {msg}?",
     "please_first": "请先",
     "download_the_template": "下载模板",
     "required_and_upload": "，按要求填写后上传",
@@ -466,6 +467,7 @@
     "import": "导入",
     "change_file": "更换文件",
     "data_import_completed": "数据导入完成",
+    "notes_import_completed": "备注导入完成",
     "imported_100_data": "成功导入数据 {msg} 条",
     "return_to_view": "返回查看",
     "continue_importing": "继续导入",
@@ -665,7 +667,9 @@
     "right": "右",
     "welcome_description": "欢迎语描述",
     "data_analysis_now": "我可以查询数据、生成图表、检测数据异常、预测数据等赶快开启智能问数吧～",
-    "window_entrance_icon": "浮窗入口图标"
+    "window_entrance_icon": "浮窗入口图标",
+    "preview_error": "当前页面禁止使用 Iframe 嵌入！",
+    "assistant_app": "小助手应用"
   },
   "chat": {
     "type": "图表类型",
@@ -754,6 +758,13 @@
     "save_and_apply": "保存并应用",
     "setting_successfully": "设置成功",
     "customize_theme_color": "自定义主题色"
+  },
+  "platform": {
+    "title": "平台对接",
+    "status_open": "已开启",
+    "status_close": "已关闭",
+    "access_in": "接入",
+    "can_enable_it": "测试连接有效后，可开启"
   },
   "authentication": {
     "invalid": "无效",

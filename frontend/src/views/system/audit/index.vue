@@ -175,7 +175,7 @@ const filterOption = ref<any[]>([
     type: 'select',
     option: [],
     field: 'oid_list',
-    title: t('audit.operation_user_name'),
+    title: t('audit.oid_name'),
     operate: 'in',
     property: { placeholder: t('common.empty') + t('audit.oid_name') },
   },
@@ -301,7 +301,7 @@ const initOptions = () => {
           </el-table-column>
           <el-table-column prop="word" :label="$t('audit.oid_name')" width="120">
             <template #default="scope">
-              {{ scope.row.oid_name }}
+              {{ scope.row.oid_name === '-1' ? '-' : scope.row.oid_name }}
             </template>
           </el-table-column>
           <el-table-column prop="word" :label="$t('audit.operation_status')" width="100">

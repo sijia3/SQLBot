@@ -1,4 +1,4 @@
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel,BigInteger
 from datetime import datetime
 from typing import Optional
 from enum import Enum
@@ -22,6 +22,9 @@ class OperationModules(str, Enum):
     PARAMS_SETTING = "params_setting"  # 参数配置
     API_KEY = "api_key"  # api key
     LOG_SETTING = "log_setting"  # api key
+    SETTING = "setting"  # 设置
+    SYSTEM_MANAGEMENT = "system_management"  # 系统管理
+    OPT_LOG = "opt_log"  # 操作日志
 
 class OperationStatus(str, Enum):
     SUCCESS = "success"
@@ -31,6 +34,10 @@ class OperationType(str, Enum):
     CREATE = "create"
     DELETE = "delete"
     UPDATE = "update"
+    RESET_PWD = "reset_pwd"
+    UPDATE_PWD = "update_pwd"
+    UPDATE_STATUS = "update_status"
+    UPDATE_TABLE_RELATION = "update_table_relation"
     EDIT = "edit"
     LOGIN = "login"
     VIEW = "view"
@@ -38,6 +45,16 @@ class OperationType(str, Enum):
     IMPORT = "import"
     ADD = "add"
     CREATE_OR_UPDATE = "create_or_update"
+    ANALYSIS = "analysis"
+    PREDICTION = "prediction"
+
+class SystemLogsResource(SQLModel, table=True):
+    __tablename__ = "sys_logs_resource"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    log_id: Optional[int] = Field(default=None,sa_type=BigInteger())
+    resource_id: Optional[str] = Field(default=None)
+    resource_name: Optional[str] = Field(default=None)
+    module: Optional[str] = Field(default=None)
 
 
 class SystemLog(SQLModel, table=True):
@@ -45,15 +62,15 @@ class SystemLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     operation_type: str = Field(default=None)
     operation_detail: str = Field(default=None)
-    user_id: Optional[int] = Field(default=None)
+    user_id: Optional[int] = Field(default=None, sa_type=BigInteger())
     operation_status: str = Field(default=None)
     ip_address: Optional[str] = Field(default=None)
     user_agent: Optional[str] = Field(default=None)
-    execution_time: int = Field(default=0, description="执行时间(毫秒)")
+    execution_time: int = Field(default=0, description="执行时间(毫秒)", sa_type=BigInteger())
     error_message: Optional[str] = Field(default=None)
     create_time: datetime = Field(default_factory=datetime.now)
     module: Optional[str] = Field(default=None)
-    oid: Optional[int] = Field(default=None)
+    oid: Optional[int] = Field(default=None, sa_type=BigInteger())
     resource_id: Optional[str] = Field(default=None)
     request_method: Optional[str] = Field(default=None)
     request_path: Optional[str] = Field(default=None)
