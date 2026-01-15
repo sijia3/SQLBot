@@ -3,8 +3,11 @@ from typing import List, Optional
 
 from sqlalchemy import and_
 from sqlbot_xpack.permissions.api.permission import transRecord2DTO
-from sqlbot_xpack.permissions.models.ds_permission import DsPermission, PermissionDTO
-from sqlbot_xpack.permissions.models.ds_rules import DsRules
+# from sqlbot_xpack.permissions.models.ds_permission import DsPermission, PermissionDTO
+# from sqlbot_xpack.permissions.models.ds_rules import DsRules
+
+# 使用本地定义的模型
+from apps.system.models.custom_permission_model import DsPermission, DsRules, PermissionDTO
 
 from apps.datasource.crud.row_permission import transFilterTree
 from apps.datasource.models.datasource import CoreDatasource, CoreField, CoreTable

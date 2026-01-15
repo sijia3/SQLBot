@@ -42,3 +42,7 @@ api_router.include_router(appearance.router)
 
 # 第三方单点登录
 api_router.include_router(third_party_login.router)
+
+from apps.system.api import custom_permission_api as permission_api # 新增引用
+# 注册权限路由，前缀必须是 /ds_permission 才能匹配前端 src/api/permissions.ts
+api_router.include_router(permission_api.router, prefix="/ds_permission", tags=["permission"])
