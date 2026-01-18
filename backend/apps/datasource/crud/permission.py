@@ -43,7 +43,7 @@ def get_row_permission_filters(session: SessionDep, current_user: CurrentUser, d
                             break
                     if flag:
                         res.append(transRecord2DTO(session, permission))
-            where_str = transFilterTree(session, res, ds)
+            where_str = transFilterTree(session, res, ds, current_user.account)
             filters.append({"table": table.table_name, "filter": where_str})
     return filters
 

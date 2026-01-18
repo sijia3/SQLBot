@@ -1,13 +1,13 @@
 # Author: Junjun
 # Date: 2025/6/25
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from apps.datasource.models.datasource import CoreField, CoreDatasource
 from apps.db.constant import DB
 from common.core.deps import SessionDep
 
 
-def transFilterTree(session: SessionDep, tree_list: List[any], ds: CoreDatasource) -> str | None:
+def transFilterTree(session: SessionDep, tree_list: List[any], ds: CoreDatasource, user_account: Optional[int] = None) -> str | None:
     if tree_list is None:
         return None
     res: List[str] = []
@@ -15,13 +15,13 @@ def transFilterTree(session: SessionDep, tree_list: List[any], ds: CoreDatasourc
         tree = dto.tree
         if tree is None:
             continue
-        tree_exp = transTreeToWhere(session, tree, ds)
+        tree_exp = transTreeToWhere(session, tree, ds, user_account)
         if tree_exp is not None:
             res.append(tree_exp)
     return " AND ".join(res)
 
 
-def transTreeToWhere(session: SessionDep, tree: any, ds: CoreDatasource) -> str | None:
+def transTreeToWhere(session: SessionDep, tree: any, ds: CoreDatasource, user_account: Optional[int] = None) -> str | None:
     if tree is None:
         return None
     logic = tree['logic']
@@ -32,20 +32,32 @@ def transTreeToWhere(session: SessionDep, tree: any, ds: CoreDatasource) -> str 
         for item in items:
             exp: str = None
             if item['type'] == 'item':
-                exp = transTreeItem(session, item, ds)
+                exp = transTreeItem(session, item, ds, user_account)
             elif item['type'] == 'tree':
-                exp = transTreeToWhere(session, item['sub_tree'], ds)
+                exp = transTreeToWhere(session, item['sub_tree'], ds, user_account)
 
             if exp is not None:
                 list.append(exp)
     return '(' + f' {logic} '.join(list) + ')' if len(list) > 0 else None
 
 
-def transTreeItem(session: SessionDep, item: Dict, ds: CoreDatasource) -> str | None:
+def transTreeItem(session: SessionDep, item: Dict, ds: CoreDatasource, user_account: Optional[int] = None) -> str | None:
     res: str = None
     field = session.query(CoreField).filter(CoreField.id == int(item['field_id'])).first()
     if field is None:
         return None
+
+    # === [1] 动态变量替换逻辑 (保持你写的) ===
+    raw_value = item.get('value')
+
+    # 如果配置的值是特定占位符，且 user_id 存在，则进行替换
+    if raw_value == '${CURRENT_USER_ACCOUNT}' and user_account is not None:
+        # 将 user_id 转为字符串
+        value = str(user_account)
+    else:
+        # 否则使用原始值 (注意处理 None 的情况防报错)
+        value = str(raw_value) if raw_value is not None else ''
+    # ======================================
 
     db = DB.get_db(ds.type)
     whereName = db.prefix + field.field_name + db.suffix
@@ -57,7 +69,7 @@ def transTreeItem(session: SessionDep, item: Dict, ds: CoreDatasource) -> str | 
             else:
                 res = "(" + whereName + " IN ('" + "','".join(item['enum_value']) + "'))"
     else:
-        value = item['value']
+        # value = item['value']
         whereTerm = transFilterTerm(item['term'])
         whereValue = ''
 
