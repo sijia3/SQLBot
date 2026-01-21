@@ -48,13 +48,19 @@ function clickQuestion(question: string): void {
 
 const stopFlag = ref(false)
 
-async function getRecommendQuestions(articles_number: number) {
+// 修改这里：增加 forceRefresh 参数，默认为 false
+async function getRecommendQuestions(articles_number: number, forceRefresh = false) {
   recommendedApi.get_datasource_recommended_base(props.datasource).then((res) => {
+    // 优先判断是否配置了自定义问题（recommended_config === 2）
     if (res.recommended_config === 2) {
       questions.value = res.questions
-    } else if (currentChat.value.recommended_generate) {
+    }
+    // 如果不是强制刷新，且当前对话已经有生成过的问题，则使用缓存
+    else if (!forceRefresh && currentChat.value.recommended_generate) {
       questions.value = currentChat.value.recommended_question as string
-    } else {
+    }
+    // 否则（自动模式且需要刷新，或首次加载），调用 LLM 生成
+    else {
       getRecommendQuestionsLLM(articles_number)
     }
   })

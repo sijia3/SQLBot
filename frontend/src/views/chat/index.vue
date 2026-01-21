@@ -733,7 +733,8 @@ function getRecommendQuestions(id?: number) {
 function quickAsk(question: string) {
   inputMessage.value = question
   nextTick(() => {
-    sendMessage()
+    // sendMessage()  <-- 删除或注释掉这一行
+    clickInput()   // <-- 改为聚焦输入框
   })
 }
 
