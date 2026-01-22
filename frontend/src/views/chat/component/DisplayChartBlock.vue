@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import ChartComponent from '@/views/chat/component/ChartComponent.vue'
 import type { ChatMessage } from '@/api/chat.ts'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { ChartTypes } from '@/views/chat/component/BaseChart.ts'
 import { useI18n } from 'vue-i18n'
+// 引入 Element Plus 的图标
+import { Loading } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   id?: number | string
@@ -73,11 +75,53 @@ const multiQuotaName = computed(() => {
 })
 
 const chartRef = ref()
+const chartOpacity = ref(1)
+const chartTransition = ref('none')
+// 新增：专门控制渲染中的 loading 状态
+const isRendering = ref(false)
 
+// 开始渲染过渡：显示 Loading，隐藏图表
+function startTransition() {
+  isRendering.value = true // 立即显示加载图标
+  chartTransition.value = 'none' // 关闭动画，瞬间隐藏
+  chartOpacity.value = 0 // 隐藏图表（防止看到布局调整的丑样子）
+}
+
+// 结束渲染过渡：隐藏 Loading，淡入图表
+function endTransition() {
+  // 稍微延迟一点点，确保 Loading 图标至少闪现一下，给用户明确反馈
+  setTimeout(() => {
+    isRendering.value = false
+    chartTransition.value = 'opacity 0.4s ease-in-out' // 开启平滑动画
+    chartOpacity.value = 1
+  }, 300) // 300ms 足够完成布局计算，且不会让用户觉得太久
+}
+
+// 监听数据变化（点击刷新或新数据到达）
+watch(
+  () => props.data,
+  (newData) => {
+    if (newData && newData.length > 0) {
+      startTransition()
+      // 等待 DOM 更新后重新渲染
+      nextTick(() => {
+        // 如果需要手动触发子组件更新，可以在这里调用，通常 props 变化会自动触发
+        // 这里主要为了配合视觉过渡
+        endTransition()
+      })
+    }
+  },
+  { immediate: true }
+)
+
+// 监听图表类型切换（点击表格/图表按钮）
 function onTypeChange() {
+  startTransition()
+
   nextTick(() => {
     chartRef.value?.destroyChart()
     chartRef.value?.renderChart()
+    endTransition()
   })
 }
 function getViewInfo() {
@@ -106,18 +150,33 @@ defineExpose({
 
 <template>
   <div v-if="message.record?.chart" class="chart-base-container">
-    <ChartComponent
+    <div v-if="isRendering" class="rendering-loader">
+      <div class="loader-content">
+        <el-icon class="is-loading" :size="24"><Loading /></el-icon>
+        <span class="loading-text">加载中...</span>
+      </div>
+    </div>
+
+    <div
       v-if="message.record.id && data?.length > 0"
-      :id="id ?? 'default_chat_id'"
-      ref="chartRef"
-      :type="chartType"
-      :columns="chartObject?.columns"
-      :x="xAxis"
-      :y="yAxis"
-      :series="series"
-      :data="data"
-      :multi-quota-name="multiQuotaName"
-    />
+      style="height: 100%; width: 100%"
+      :style="{
+        opacity: chartOpacity,
+        transition: chartTransition
+      }"
+    >
+      <ChartComponent
+        :id="id ?? 'default_chat_id'"
+        ref="chartRef"
+        :type="chartType"
+        :columns="chartObject?.columns"
+        :x="xAxis"
+        :y="yAxis"
+        :series="series"
+        :data="data"
+        :multi-quota-name="multiQuotaName"
+      />
+    </div>
     <el-empty v-else :description="loadingData ? t('chat.loading_data') : t('chat.no_data')" />
   </div>
 </template>
@@ -128,5 +187,33 @@ defineExpose({
   width: 100%;
   border-radius: 12px;
   background: rgba(224, 224, 226, 0.29);
+  overflow: hidden;
+  position: relative; // 确保 loader 绝对定位相对于此容器
+}
+
+.rendering-loader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.5); // 半透明背景，让用户知道还是在当前卡片里
+  backdrop-filter: blur(2px); // 可选：轻微模糊背景增加质感
+
+  .loader-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+
+    .loading-text {
+      font-size: 12px;
+      color: #909399;
+    }
+  }
 }
 </style>
