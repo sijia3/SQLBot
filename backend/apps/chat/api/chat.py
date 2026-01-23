@@ -5,7 +5,7 @@ from typing import Optional, List
 
 import orjson
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, select
 from starlette.responses import JSONResponse
@@ -70,10 +70,14 @@ async def chat_predict_data(session: SessionDep, chat_record_id: int):
     return await asyncio.to_thread(inner) """
 
 @router.get("/record/{chat_record_id}/data", summary=f"{PLACEHOLDER_PREFIX}get_chart_data")
-async def chat_record_data(session: SessionDep, current_user: CurrentUser, chat_record_id: int):
+async def chat_record_data(session: SessionDep, current_user: CurrentUser, chat_record_id: int,
+                           # 新增分页参数，设置默认值以保持向后兼容（或者默认为第一页）
+                           page: Optional[int] = Query(None, description="Page number"),
+                           page_size: Optional[int] = Query(None, description="Page size")
+                           ):
     def inner():
         data = get_chart_data_with_user(chat_record_id=chat_record_id, session=session, current_user=current_user)
-        return format_json_data(data)
+        return format_json_data(data, page=page, page_size=page_size)
 
     return await asyncio.to_thread(inner)
 

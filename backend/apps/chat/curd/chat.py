@@ -158,9 +158,23 @@ def get_last_execute_sql_error(session: SessionDep, chart_id: int):
     return None
 
 
-def format_json_data(origin_data: dict):
+def format_json_data(origin_data: dict, page: int = None, page_size: int = None):
+    """
+    格式化数据并支持分页
+    """
     result = {'fields': origin_data.get('fields') if origin_data.get('fields') else []}
     _list = origin_data.get('data') if origin_data.get('data') else []
+
+    # 计算总数
+    total = len(_list)
+    result['total'] = total
+
+    # 如果传入了分页参数，进行切片
+    if page is not None and page_size is not None:
+        start = (page - 1) * page_size
+        end = start + page_size
+        _list = _list[start:end]
+
     data = format_json_list_data(_list)
     result['data'] = data
 

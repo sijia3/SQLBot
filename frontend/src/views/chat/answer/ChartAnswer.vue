@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BaseAnswer from './BaseAnswer.vue'
 import { Chat, chatApi, ChatInfo, type ChatMessage, ChatRecord, questionApi } from '@/api/chat.ts'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, reactive } from 'vue'
 import ChartBlock from '@/views/chat/chat-block/ChartBlock.vue'
 import JSONBig from 'json-bigint'
 
@@ -235,21 +235,57 @@ const sendMessage = async () => {
 
 const loadingData = ref(false)
 
-function getChatData(recordId?: number) {
+// 1. 定义分页状态
+const pagination = reactive({
+  currentPage: 1,
+  pageSize: 20,
+  total: 0,
+})
+
+/**
+ * 获取图表数据
+ * @param recordId 记录ID
+ * @param autoScroll 是否自动滚动到底部 (默认为 true，翻页时应设为 false)
+ */
+function getChatData(recordId?: number, autoScroll: boolean = true) {
   loadingData.value = true
   chatApi
-    .get_chart_data(recordId)
+    .get_chart_data(recordId, pagination.currentPage, pagination.pageSize)
     .then((response) => {
+      // 1. 先更新数据
       _currentChat.value.records.forEach((record) => {
         if (record.id === recordId) {
-          record.data = response
+          if (response && typeof response.total !== 'undefined') {
+            record.data = response
+            pagination.total = response.total
+          } else {
+            record.data = response
+            pagination.total = response.length || 0
+          }
         }
       })
+      nextTick(() => {
+        loadingData.value = false
+      })
+    })
+    .catch(() => {
+      loadingData.value = false
     })
     .finally(() => {
-      loadingData.value = false
-      emits('scrollBottom')
+      // 注意：不要在这里关闭 loadingData，否则会覆盖上面的延时逻辑
+      if (autoScroll) {
+        emits('scrollBottom')
+      }
     })
+}
+
+// 3. 处理分页变化
+// Script
+const handlePageChange = () => {
+  // 当页码或条数变化时，重新请求数据
+  if (props.message?.record?.id) {
+    getChatData(props.message.record.id, false)
+  }
 }
 
 function stop() {
@@ -264,7 +300,7 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   if (props.message?.record?.id && props.message?.record?.finish) {
-    getChatData(props.message.record.id)
+    getChatData(props.message.record.id, true)
   }
 })
 
@@ -278,6 +314,10 @@ defineExpose({ sendMessage, index: () => index.value, stop })
       :message="message"
       :record-id="recordId"
       :loading-data="loadingData"
+      :total="pagination.total"
+      v-model:current-page="pagination.currentPage"
+      v-model:page-size="pagination.pageSize"
+      @page-change="handlePageChange"
     />
     <slot></slot>
     <template #tool>

@@ -34,6 +34,10 @@ const props = withDefaults(
     chatType?: ChartTypes
     enlarge?: boolean
     loadingData?: boolean
+    // 新增分页相关 Props
+    total?: number
+    currentPage?: number
+    pageSize?: number
   }>(),
   {
     recordId: undefined,
@@ -41,6 +45,10 @@ const props = withDefaults(
     chatType: undefined,
     enlarge: false,
     loadingData: false,
+    // 默认值
+    total: 0,
+    currentPage: 1,
+    pageSize: 20,
   }
 )
 
@@ -48,7 +56,13 @@ const { copy } = useClipboard({ legacy: true })
 const loading = ref<boolean>(false)
 const { t } = useI18n()
 const addViewRef = ref(null)
-const emits = defineEmits(['exitFullScreen'])
+// 新增分页相关 Emits
+const emits = defineEmits([
+  'exitFullScreen',
+  'update:currentPage',
+  'update:pageSize',
+  'page-change',
+])
 
 const dataObject = computed<{
   fields: Array<string>
@@ -323,6 +337,29 @@ watch(
     }
   }
 )
+
+// ✅ 新增：监听数据变化，强制刷新图表/表格
+// 这一步至关重要，解决分页后数据变了但界面不刷新的问题
+watch(
+  () => data.value,
+  () => {
+    // 当分页数据变化时，调用子组件的刷新方法
+    if (chartRef.value) {
+      reloadChart()
+    }
+  },
+  { deep: true } // 深度监听，确保捕获对象内部变化
+)
+
+// ✅ 分页处理函数
+const handleSizeChange = (val: number) => {
+  emits('update:pageSize', val)
+  emits('page-change')
+}
+const handleCurrentChange = (val: number) => {
+  emits('update:currentPage', val)
+  emits('page-change')
+}
 </script>
 
 <template>
@@ -478,6 +515,21 @@ watch(
           :loading-data="loadingData"
         />
       </div>
+
+      <div v-if="currentChartType === 'table' && total > 0" class="pagination-container">
+        <el-pagination
+          :current-page="props.currentPage"
+          :page-size="props.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          size="small"
+          layout="total, prev, pager, next, sizes"
+          :total="total"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+          :disabled="loadingData"
+        />
+      </div>
+
       <div v-if="dataObject.limit" class="over-limit-hint">
         {{ t('chat.data_over_limit', [dataObject.limit]) }}
       </div>
@@ -501,6 +553,12 @@ watch(
         :chat-type="chartType"
         :loading-data="loadingData"
         enlarge
+        :total="total"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        @update:current-page="(val) => emits('update:currentPage', val)"
+        @update:page-size="(val) => emits('update:pageSize', val)"
+        @page-change="() => emits('page-change')"
         @exit-full-screen="onExitFullScreen"
       />
     </el-dialog>
@@ -528,278 +586,89 @@ watch(
   </div>
 </template>
 
-<style lang="less">
-.chart-fullscreen-dialog {
-  padding: 0;
-}
-
-.chart-fullscreen-dialog-header {
-  display: none;
-}
-
-.chart-fullscreen-dialog-body {
-  padding: 0;
-}
-
-.chart-sql-drawer-body {
-  padding: 24px;
-}
-
-.export_to_select.export_to_select {
-  padding: 4px 0;
-  width: 120px !important;
-  min-width: 120px !important;
-  box-shadow: 0px 4px 8px 0px #1f23291a;
-  border: 1px solid #dee0e3;
-
-  .popover {
-    .popover-content {
-      padding: 0 4px;
-      max-height: 300px;
-      overflow-y: auto;
-
-      .title {
-        width: 100%;
-        height: 32px;
-        margin-bottom: 2px;
-        display: flex;
-        align-items: center;
-        padding-left: 8px;
-        color: #8f959e;
-      }
-    }
-
-    .popover-item {
-      height: 32px;
-      display: flex;
-      align-items: center;
-      padding-left: 12px;
-      padding-right: 8px;
-      margin-bottom: 2px;
-      position: relative;
-      border-radius: 4px;
-      cursor: pointer;
-
-      &:last-child {
-        margin-bottom: 0;
-      }
-
-      &:hover {
-        background: #1f23291a;
-      }
-
-      .model-name {
-        margin-left: 8px;
-        font-weight: 400;
-        font-size: 14px;
-        line-height: 22px;
-        max-width: 220px;
-      }
-
-      .done {
-        margin-left: auto;
-        display: none;
-      }
-
-      &.isActive {
-        color: var(--ed-color-primary);
-
-        .done {
-          display: block;
-        }
-      }
-    }
-  }
-}
-</style>
 <style scoped lang="less">
 .chart-component-container {
   width: 100%;
   padding: 16px;
   display: flex;
   flex-direction: column;
-
   border: 1px solid rgba(222, 224, 227, 1);
   border-radius: 12px;
+  background-color: var(--el-bg-color); // 确保背景色
+  height: fit-content;
+  position: relative; // ✅ 确保 v-loading 能够正确遮罩
 
   &.full-screen {
-    border: unset;
-    border-radius: unset;
+    border: none;
+    height: 100%;
     padding: 0;
-
-    .header-bar {
-      border-bottom: 1px solid rgba(31, 35, 41, 0.15);
-      height: 55px;
-      padding: 16px 24px;
-    }
-
-    .chart-block {
-      margin: unset;
-      padding: 16px;
-
-      height: calc(100vh - 56px);
-    }
   }
 
   .header-bar {
-    height: 32px;
     display: flex;
-
+    justify-content: space-between;
     align-items: center;
-    flex-direction: row;
-    gap: 16px;
-
-    .tool-btn {
-      width: 24px;
-      height: 24px;
-
-      font-size: 16px;
-      font-weight: 400;
-      line-height: 24px;
-      border-radius: 6px;
-      color: rgba(100, 106, 115, 1);
-
-      .tool-btn-inner {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-      }
-
-      &:hover {
-        background: rgba(31, 35, 41, 0.1);
-      }
-
-      &:active {
-        background: rgba(31, 35, 41, 0.1);
-      }
-    }
-
-    .chart-active {
-      background: var(--ed-color-primary-1a, rgba(28, 186, 144, 0.1));
-      color: var(--ed-color-primary, rgba(28, 186, 144, 1));
-      border-radius: 6px;
-
-      :deep(.ed-select__wrapper) {
-        background: transparent;
-      }
-
-      :deep(.ed-select__input) {
-        color: var(--ed-color-primary, rgba(28, 186, 144, 1));
-      }
-
-      :deep(.ed-select__placeholder) {
-        color: var(--ed-color-primary, rgba(28, 186, 144, 1));
-      }
-
-      :deep(.ed-select__caret) {
-        color: var(--ed-color-primary, rgba(28, 186, 144, 1));
-      }
-    }
+    margin-bottom: 12px; // 底部留白
 
     .title {
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-
-      color: rgba(31, 35, 41, 1);
-      font-weight: 500;
       font-size: 16px;
-      line-height: 24px;
+      font-weight: 500;
+      color: var(--el-text-color-primary);
     }
 
     .buttons-bar {
       display: flex;
-      flex-direction: row;
       align-items: center;
+      gap: 4px; // 按钮间距
 
-      gap: 16px;
+      .chart-select-container {
+        display: flex;
+        background-color: var(--el-fill-color-light);
+        border-radius: 6px;
+        padding: 2px;
+        margin-right: 8px;
+
+        .tool-btn {
+          height: 24px;
+          padding: 0 8px;
+          border-radius: 4px;
+
+          &.chart-active {
+            background-color: var(--el-bg-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          }
+        }
+      }
 
       .divider {
         width: 1px;
         height: 16px;
-        border-left: 1px solid rgba(31, 35, 41, 0.15);
-      }
-    }
-
-    .chart-select-container {
-      padding: 3px;
-      display: flex;
-      flex-direction: row;
-      gap: 4px;
-      border-radius: 6px;
-
-      border: 1px solid rgba(217, 220, 223, 1);
-
-      .chart-select {
-        min-width: 40px;
-        width: 40px;
-        height: 24px;
-
-        :deep(.ed-select__wrapper) {
-          padding: 4px;
-          min-height: 24px;
-          box-shadow: unset;
-          border-radius: 6px;
-
-          &:hover {
-            background: rgba(31, 35, 41, 0.1);
-          }
-
-          &:active {
-            background: rgba(31, 35, 41, 0.1);
-          }
-        }
-
-        :deep(.ed-select__caret) {
-          font-size: 12px !important;
-        }
+        background-color: var(--el-border-color);
+        margin: 0 8px;
       }
     }
   }
 
   .chart-block {
-    height: 352px;
-    width: 100%;
-
-    margin-top: 16px;
+    flex: 1;
+    overflow: hidden; // 防止图表溢出
+    min-height: 300px;
   }
+
+  // ✅ 分页样式优化
+  .pagination-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--el-border-color-lighter);
+  }
+
   .over-limit-hint {
-    min-height: 24px;
-    line-height: 24px;
-    font-size: 14px;
-  }
-}
-
-.sql-block {
-  position: relative;
-
-  .input-icon {
-    min-width: unset;
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    color: #1f2329;
-    display: none;
-    background-color: transparent !important;
-
-    border-color: #dee0e3;
-    box-shadow: 0px 4px 8px 0px #1f23291a;
-
-    &:hover,
-    &:focus {
-      color: var(--ed-color-primary);
-    }
-
-    &:active {
-      color: var(--ed-color-primary-dark-2);
-    }
-  }
-
-  &:hover {
-    .input-icon {
-      display: flex;
-    }
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    text-align: right;
   }
 }
 </style>

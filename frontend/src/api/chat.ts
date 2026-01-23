@@ -37,6 +37,7 @@ export class ChatRecord {
   sql_answer?: string
   sql?: string
   data?: string | any
+  total?: number = 0
   chart_answer?: string
   chart?: string
   analysis?: string
@@ -112,6 +113,7 @@ export class ChatRecord {
     this.sql_answer = sql_answer
     this.sql = sql
     this.data = data
+    this.total = 0
     this.chart_answer = chart_answer
     this.chart = chart
     this.analysis = analysis
@@ -321,8 +323,10 @@ export const chatApi = {
   get_with_Data: (id: number): Promise<ChatInfo> => {
     return request.get(`/chat/${id}/with_data`)
   },
-  get_chart_data: (record_id?: number): Promise<any> => {
-    return request.get(`/chat/record/${record_id}/data`)
+  get_chart_data: (record_id?: number, page: number = 1, page_size: number = 20): Promise<any> => {
+    return request.get(`/chat/record/${record_id}/data`, {
+      params: { page, page_size },
+    })
   },
   get_chart_predict_data: (record_id?: number): Promise<any> => {
     return request.get(`/chat/record/${record_id}/predict_data`)
